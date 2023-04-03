@@ -135,6 +135,7 @@ class BOSSVS(BaseEstimator, UnivariateClassifierMixin):
         self.use_idf = use_idf
         self.smooth_idf = smooth_idf
         self.sublinear_tf = sublinear_tf
+        self.sentences_ = []
 
     def fit(self, X, y):
         """Compute the document-term matrix.
@@ -179,6 +180,8 @@ class BOSSVS(BaseEstimator, UnivariateClassifierMixin):
         X_word = np.asarray([''.join(X_sfa[i])
                              for i in range(n_samples * n_windows)])
         X_word = X_word.reshape(n_samples, n_windows)
+
+        self.sentences_ = X_word
 
         if self.numerosity_reduction:
             not_equal = np.c_[X_word[:, 1:] != X_word[:, :-1],
@@ -249,6 +252,33 @@ class BOSSVS(BaseEstimator, UnivariateClassifierMixin):
         if self.idf_ is not None:
             X_tf /= self.idf_
         return cosine_similarity(X_tf, self.tfidf_)
+
+    def get_sentences(self, X):
+        """Evaluate the cosine similarity between document-term matrix and X.
+
+        Parameters
+        ----------
+        X : array-like, shape (n_samples, n_timestamps)
+            Test samples.
+
+        Returns
+        -------
+        X : array, shape (n_samples, n_classes)
+            Cosine similarity between the document-term matrix and X.
+
+        """
+        check_is_fitted(self, ['vocabulary_', 'tfidf_', 'idf_', '_tfidf'])
+        X = check_array(X, dtype='float64')
+        n_samples, n_timestamps = X.shape
+
+        X_windowed = _windowed_view(
+            X, n_samples, n_timestamps, self._window_size, self._window_step
+        )
+        X_windowed = X_windowed.reshape(-1, self._window_size)
+
+        X_sfa = self._sfa.transform(X_windowed)
+        X_word = np.asarray([''.join(X_sfa[i]) for i in range(X_sfa.shape[0])])
+        return X_word.reshape(n_samples, self._n_windows)
 
     def predict(self, X):
         """Predict the class labels for the provided data.
